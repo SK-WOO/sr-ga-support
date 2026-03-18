@@ -10,9 +10,12 @@ ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScal
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const VERSION         = "v0.1.0";
+const BUILD_DATE      = "2026-03-18";
+const SR_GATE_URL     = "https://sr-gate.vercel.app";
+const MANUAL_URL_EN   = "https://github.com/SK-WOO/sr-ga-support/blob/master/docs/manual_en.md";
+const MANUAL_URL_KO   = "https://github.com/SK-WOO/sr-ga-support/blob/master/docs/manual_ko.md";
 const APPS_SCRIPT_URL = process.env.REACT_APP_SCRIPT_URL  || "";
 const CLIENT_ID       = process.env.REACT_APP_CLIENT_ID   || "";
-const API_SECRET      = process.env.REACT_APP_API_SECRET  || "ga-secret";
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 const REQ_CATEGORIES = {
@@ -127,11 +130,11 @@ function useAuth() {
 const post = body => fetch(APPS_SCRIPT_URL, {
   method:"POST", redirect:"follow",
   headers:{ "Content-Type":"text/plain;charset=utf-8" },
-  body: JSON.stringify({ ...body, secret:API_SECRET }),
+  body: JSON.stringify(body),
 }).then(r=>r.json());
 
 const get = action =>
-  fetch(`${APPS_SCRIPT_URL}?action=${action}&secret=${API_SECRET}`, { redirect:"follow" })
+  fetch(`${APPS_SCRIPT_URL}?action=${action}`, { redirect:"follow" })
     .then(r=>r.json());
 
 // ─── SMALL UI ────────────────────────────────────────────────────────────────
@@ -897,13 +900,22 @@ export default function App() {
         position:"sticky",top:0,zIndex:100 }}>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <span style={{ fontSize:20 }}>🏢</span>
-          <strong style={{ fontSize:15 }}>GA Support</strong>
-          <span style={{ fontSize:11,opacity:.7 }}>{VERSION}</span>
+          <strong style={{ fontSize:15 }}>SR GA Support</strong>
+          <span style={{ fontSize:10,opacity:.6 }}>{VERSION} · {BUILD_DATE}</span>
         </div>
-        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+        <div style={{ display:"flex",alignItems:"center",gap:8 }}>
           {!isMobile&&<span style={{ fontSize:12,opacity:.8 }}>{user.name}</span>}
+          <a href={MANUAL_URL_KO} target="_blank" rel="noreferrer"
+            style={{ background:"rgba(255,255,255,.15)",border:"none",color:"#fff",
+              padding:"4px 10px",borderRadius:4,fontSize:11,textDecoration:"none",whiteSpace:"nowrap" }}>📖 KO</a>
+          <a href={MANUAL_URL_EN} target="_blank" rel="noreferrer"
+            style={{ background:"rgba(255,255,255,.15)",border:"none",color:"#fff",
+              padding:"4px 10px",borderRadius:4,fontSize:11,textDecoration:"none",whiteSpace:"nowrap" }}>📖 EN</a>
+          <a href={SR_GATE_URL} target="_blank" rel="noreferrer"
+            style={{ background:"rgba(255,255,255,.15)",border:"none",color:"#fff",
+              padding:"4px 10px",borderRadius:4,fontSize:11,textDecoration:"none",whiteSpace:"nowrap" }}>🏠 Gate</a>
           <button onClick={logout} style={{ background:"rgba(255,255,255,.15)",border:"none",
-            color:"#fff",padding:"4px 10px",borderRadius:4,cursor:"pointer",fontSize:12 }}>Sign out</button>
+            color:"#fff",padding:"4px 10px",borderRadius:4,cursor:"pointer",fontSize:11 }}>Sign out</button>
         </div>
       </div>
 
