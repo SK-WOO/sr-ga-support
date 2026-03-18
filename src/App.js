@@ -1,25 +1,935 @@
-import logo from './logo.svg';
-import './App.css';
+/* eslint-disable react-hooks/exhaustive-deps */
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import {
+  Chart as ChartJS,
+  ArcElement, BarElement, LineElement, PointElement,
+  CategoryScale, LinearScale, Tooltip, Legend,
+} from "chart.js";
+import { Doughnut, Bar } from "react-chartjs-2";
+ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend);
 
-function App() {
+// ─── CONFIG ──────────────────────────────────────────────────────────────────
+const VERSION         = "v0.1.0";
+const APPS_SCRIPT_URL = process.env.REACT_APP_SCRIPT_URL  || "";
+const CLIENT_ID       = process.env.REACT_APP_CLIENT_ID   || "";
+const API_SECRET      = process.env.REACT_APP_API_SECRET  || "ga-secret";
+
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const REQ_CATEGORIES = {
+  general:   { label:"General Request",    icon:"📋", types:["business_card","onboarding_item","onboarding_account","offboarding_item","offboarding_account","corporate_card"] },
+  travel:    { label:"Business Travel",    icon:"✈️", types:["domestic_trip","overseas_trip"] },
+  breakdown: { label:"Breakdown Report",   icon:"🔧", types:["asset_breakdown","facility_breakdown","it_breakdown","item_breakdown"] },
+  rental:    { label:"Rental Request",     icon:"📦", types:["car_rental","rnd_item","equipment_rental"] },
+};
+
+const REQ_TYPES = {
+  business_card:       { label:"Business Card",           cat:"general",   icon:"🪪" },
+  onboarding_item:     { label:"Onboarding Items",        cat:"general",   icon:"🎁" },
+  onboarding_account:  { label:"Onboarding Account",      cat:"general",   icon:"🔑" },
+  offboarding_item:    { label:"Offboarding Item Return", cat:"general",   icon:"↩️" },
+  offboarding_account: { label:"Offboarding Account",     cat:"general",   icon:"🔐" },
+  corporate_card:      { label:"Corporate Card",          cat:"general",   icon:"💳" },
+  domestic_trip:       { label:"Domestic Trip",           cat:"travel",    icon:"🚆" },
+  overseas_trip:       { label:"Overseas Trip",           cat:"travel",    icon:"✈️" },
+  asset_breakdown:     { label:"Asset Breakdown",         cat:"breakdown", icon:"💻" },
+  facility_breakdown:  { label:"Facility Breakdown",      cat:"breakdown", icon:"🏢" },
+  it_breakdown:        { label:"IT Breakdown",            cat:"breakdown", icon:"🖥️" },
+  item_breakdown:      { label:"Item Breakdown",          cat:"breakdown", icon:"📦" },
+  car_rental:          { label:"Company Car Rental",      cat:"rental",    icon:"🚗" },
+  rnd_item:            { label:"R&D Item Request",        cat:"rental",    icon:"🔬" },
+  equipment_rental:    { label:"Equipment Rental",        cat:"rental",    icon:"🪑" },
+};
+
+const DEFAULT_CHAINS = {
+  business_card:       ["assignee"],
+  onboarding_item:     ["assignee"],
+  onboarding_account:  ["assignee"],
+  offboarding_item:    ["assignee"],
+  offboarding_account: ["assignee"],
+  corporate_card:      ["manager","ceo","assignee"],
+  domestic_trip:       ["manager","assignee"],
+  overseas_trip:       ["manager","ceo","assignee"],
+  asset_breakdown:     ["assignee"],
+  facility_breakdown:  ["assignee"],
+  it_breakdown:        ["assignee"],
+  item_breakdown:      ["assignee"],
+  car_rental:          ["assignee"],
+  rnd_item:            ["assignee"],
+  equipment_rental:    ["assignee"],
+};
+
+const ONBOARDING_ITEMS = ["PC / Laptop","Monitor","Uniform","Sticker","Crocs","Desk Chair","Access Card","Other"];
+const TRAVEL_SUBS = ["Airfare","Hotel","Transportation","Other","Expense Claim"];
+
+const C = {
+  primary:"#1d4ed8", primaryLight:"#dbeafe",
+  danger:"#dc2626",  dangerLight:"#fee2e2",
+  success:"#16a34a", successLight:"#dcfce7",
+  warning:"#d97706", warningLight:"#fef3c7",
+  gray:"#6b7280",    grayLight:"#f3f4f6",
+  border:"#e5e7eb",  text:"#111827", muted:"#6b7280",
+  bg:"#f9fafb",      white:"#ffffff",
+};
+
+const STATUS = {
+  pending:     { bg:"#fef9c3", color:"#854d0e", label:"Pending"     },
+  in_progress: { bg:"#dbeafe", color:"#1e40af", label:"In Progress" },
+  approved:    { bg:"#dcfce7", color:"#15803d", label:"Approved"    },
+  rejected:    { bg:"#fee2e2", color:"#b91c1c", label:"Rejected"    },
+  completed:   { bg:"#f0fdf4", color:"#166534", label:"Completed"   },
+  cancelled:   { bg:"#f3f4f6", color:"#6b7280", label:"Cancelled"   },
+};
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+function useIsMobile(bp=680) {
+  const [w, setW] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const h = () => setW(window.innerWidth);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  return w < bp;
+}
+
+function buildOAuthUrl() {
+  const nonce = Math.random().toString(36).slice(2);
+  return `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
+    client_id: CLIENT_ID, redirect_uri: window.location.origin,
+    response_type:"id_token", scope:"openid email profile", nonce,
+  })}`;
+}
+
+// ─── AUTH ────────────────────────────────────────────────────────────────────
+function useAuth() {
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("ga_user")||"null"); } catch { return null; }
+  });
+  useEffect(() => {
+    const hash = new URLSearchParams(window.location.hash.replace("#","?").slice(1));
+    const tok = hash.get("id_token");
+    if (tok) {
+      try {
+        const p = JSON.parse(atob(tok.split(".")[1]));
+        if (p?.email) {
+          const u = { name:p.name, email:p.email, picture:p.picture };
+          setUser(u);
+          localStorage.setItem("ga_user", JSON.stringify(u));
+        }
+      } catch {}
+      window.history.replaceState(null,"", window.location.pathname);
+    }
+  }, []);
+  const logout = useCallback(() => { localStorage.removeItem("ga_user"); setUser(null); }, []);
+  return { user, logout };
+}
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+const post = body => fetch(APPS_SCRIPT_URL, {
+  method:"POST", redirect:"follow",
+  headers:{ "Content-Type":"text/plain;charset=utf-8" },
+  body: JSON.stringify({ ...body, secret:API_SECRET }),
+}).then(r=>r.json());
+
+const get = action =>
+  fetch(`${APPS_SCRIPT_URL}?action=${action}&secret=${API_SECRET}`, { redirect:"follow" })
+    .then(r=>r.json());
+
+// ─── SMALL UI ────────────────────────────────────────────────────────────────
+function Badge({ status }) {
+  const s = STATUS[status]||STATUS.pending;
+  return <span style={{ padding:"2px 8px", borderRadius:12, background:s.bg, color:s.color, fontSize:11, fontWeight:600 }}>{s.label}</span>;
+}
+
+function Btn({ onClick, children, variant="primary", disabled, style={} }) {
+  const v = {
+    primary:{ background:C.primary, color:"#fff" },
+    danger: { background:C.danger,  color:"#fff" },
+    outline:{ background:"#fff",    color:C.primary, border:`1px solid ${C.primary}` },
+    gray:   { background:C.grayLight, color:C.text },
+  }[variant];
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <button onClick={onClick} disabled={disabled}
+      style={{ padding:"8px 16px", borderRadius:6, border:"none", cursor:"pointer",
+        fontWeight:600, fontSize:13, opacity:disabled?.5:1, ...v, ...style }}>
+      {children}
+    </button>
+  );
+}
+
+function Toast({ msg, type, onClose }) {
+  useEffect(()=>{ const t=setTimeout(onClose,3500); return ()=>clearTimeout(t); },[onClose]);
+  const bg = type==="error"?C.dangerLight:type==="success"?C.successLight:"#f0f9ff";
+  const color = type==="error"?C.danger:type==="success"?C.success:C.primary;
+  return (
+    <div style={{ position:"fixed", bottom:24, right:24, zIndex:9999, background:bg, color,
+      border:`1px solid ${color}`, borderRadius:8, padding:"12px 16px", maxWidth:320,
+      boxShadow:"0 4px 12px rgba(0,0,0,.15)", fontSize:14, display:"flex", gap:8 }}>
+      <span style={{ flex:1 }}>{msg}</span>
+      <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color, fontWeight:700 }}>×</button>
     </div>
   );
 }
 
-export default App;
+function Modal({ title, onClose, children, width=520 }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.45)", zIndex:1000,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:width,
+        maxHeight:"90vh", overflow:"auto", boxShadow:"0 20px 60px rgba(0,0,0,.3)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+          padding:"16px 20px", borderBottom:`1px solid ${C.border}`, position:"sticky", top:0, background:"#fff", zIndex:1 }}>
+          <strong style={{ fontSize:16 }}>{title}</strong>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", fontSize:20, color:C.gray }}>×</button>
+        </div>
+        <div style={{ padding:20 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Fld({ label, required, children }) {
+  return (
+    <div style={{ marginBottom:14 }}>
+      {label && <label style={{ fontSize:12, fontWeight:600, color:C.muted, display:"block", marginBottom:4 }}>
+        {label}{required&&<span style={{ color:C.danger }}> *</span>}
+      </label>}
+      {children}
+    </div>
+  );
+}
+
+const inputStyle = { width:"100%", border:`1px solid ${C.border}`, borderRadius:6,
+  padding:"8px 10px", fontSize:13, boxSizing:"border-box", background:"#fff" };
+
+function Inp({ value, onChange, placeholder, type="text", style={} }) {
+  return <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+    type={type} style={{ ...inputStyle, ...style }} />;
+}
+
+function Sel({ value, onChange, options, placeholder }) {
+  return (
+    <select value={value} onChange={e=>onChange(e.target.value)} style={inputStyle}>
+      {placeholder&&<option value="">{placeholder}</option>}
+      {options.map(o=><option key={o.value||o} value={o.value||o}>{o.label||o}</option>)}
+    </select>
+  );
+}
+
+function Txa({ value, onChange, placeholder, rows=3 }) {
+  return <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+    rows={rows} style={{ ...inputStyle, resize:"vertical" }} />;
+}
+
+// ─── NEW REQUEST MODAL ───────────────────────────────────────────────────────
+function NewRequestModal({ onClose, onSubmit, roster, quotas, user }) {
+  const [step, setStep]    = useState(1);
+  const [cat,  setCat]     = useState("");
+  const [type, setType]    = useState("");
+  const [form, setForm]    = useState({});
+  const [files, setFiles]  = useState([]);
+  const [busy,  setBusy]   = useState(false);
+  const fileRef = useRef();
+
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const typeInfo = type ? REQ_TYPES[type] : null;
+  const catTypes = cat ? REQ_CATEGORIES[cat]?.types.map(t=>({value:t,...REQ_TYPES[t]})) : [];
+  const needAttach = form.subType==="Expense Claim";
+
+  const canSubmit = type && form.title && !(needAttach && files.length===0);
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    try {
+      await onSubmit({ type, category:cat, ...form, attachments:[] });
+      onClose();
+    } catch(e) { alert("Submit failed: "+e.message); }
+    finally { setBusy(false); }
+  };
+
+  if (step===1) return (
+    <Modal title="New Request — Category" onClose={onClose}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        {Object.entries(REQ_CATEGORIES).map(([k,c])=>(
+          <button key={k} onClick={()=>{setCat(k);setStep(2);}}
+            style={{ padding:"18px 12px", border:`2px solid ${C.border}`, borderRadius:10, background:"#fff",
+              cursor:"pointer", textAlign:"center" }}
+            onMouseOver={e=>{e.currentTarget.style.borderColor=C.primary;e.currentTarget.style.background=C.primaryLight;}}
+            onMouseOut={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background="#fff";}}>
+            <div style={{ fontSize:28, marginBottom:6 }}>{c.icon}</div>
+            <div style={{ fontWeight:700, fontSize:13 }}>{c.label}</div>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+
+  if (step===2) return (
+    <Modal title={`${REQ_CATEGORIES[cat]?.label}`} onClose={onClose}>
+      <button onClick={()=>setStep(1)} style={{ background:"none",border:"none",color:C.primary,cursor:"pointer",marginBottom:12,fontSize:13 }}>← Back</button>
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        {catTypes.map(t=>(
+          <button key={t.value} onClick={()=>{setType(t.value);setStep(3);}}
+            style={{ padding:"12px 14px", border:`1px solid ${C.border}`, borderRadius:8,
+              background:"#fff", cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:10 }}
+            onMouseOver={e=>e.currentTarget.style.background=C.primaryLight}
+            onMouseOut={e=>e.currentTarget.style.background="#fff"}>
+            <span style={{ fontSize:20 }}>{t.icon}</span>
+            <span style={{ fontWeight:600, fontSize:14 }}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+
+  return (
+    <Modal title={`${typeInfo?.icon} ${typeInfo?.label}`} onClose={onClose}>
+      <button onClick={()=>setStep(2)} style={{ background:"none",border:"none",color:C.primary,cursor:"pointer",marginBottom:12,fontSize:13 }}>← Back</button>
+
+      <Fld label="Title / Summary" required>
+        <Inp value={form.title||""} onChange={v=>set("title",v)} placeholder="Brief description" />
+      </Fld>
+
+      {type==="onboarding_item" && (
+        <Fld label="Items Needed">
+          <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+            {ONBOARDING_ITEMS.map(item=>{
+              const on=(form.items||[]).includes(item);
+              return (
+                <button key={item} onClick={()=>set("items", on?(form.items||[]).filter(i=>i!==item):[...(form.items||[]),item])}
+                  style={{ padding:"4px 10px", borderRadius:16, border:`1px solid ${on?C.primary:C.border}`,
+                    background:on?C.primaryLight:"#fff", cursor:"pointer", fontSize:12, fontWeight:on?600:400 }}>
+                  {item}
+                </button>
+              );
+            })}
+          </div>
+        </Fld>
+      )}
+
+      {(type==="domestic_trip"||type==="overseas_trip") && (
+        <>
+          <Fld label="Travel Support Type" required>
+            <Sel value={form.subType||""} onChange={v=>set("subType",v)} options={TRAVEL_SUBS} placeholder="Select..." />
+          </Fld>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <Fld label="Departure" required><Inp type="date" value={form.startDate||""} onChange={v=>set("startDate",v)} /></Fld>
+            <Fld label="Return" required><Inp type="date" value={form.endDate||""} onChange={v=>set("endDate",v)} /></Fld>
+          </div>
+          <Fld label="Destination" required>
+            <Inp value={form.destination||""} onChange={v=>set("destination",v)} placeholder={type==="overseas_trip"?"e.g. Tokyo, Japan":"e.g. Busan"} />
+          </Fld>
+          {form.subType==="Expense Claim" && (
+            <Fld label="Amount (KRW)" required>
+              <Inp type="number" value={form.amount||""} onChange={v=>set("amount",v)} placeholder="0" />
+            </Fld>
+          )}
+        </>
+      )}
+
+      {(type==="car_rental"||type==="equipment_rental"||type==="rnd_item") && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <Fld label="From" required><Inp type="date" value={form.startDate||""} onChange={v=>set("startDate",v)} /></Fld>
+          <Fld label="To" required><Inp type="date" value={form.endDate||""} onChange={v=>set("endDate",v)} /></Fld>
+        </div>
+      )}
+
+      {cat==="breakdown" && (
+        <Fld label="Asset / Location" required>
+          <Inp value={form.asset||""} onChange={v=>set("asset",v)} placeholder="e.g. MacBook SN:XXX / Meeting Room B" />
+        </Fld>
+      )}
+
+      <Fld label="Details / Notes">
+        <Txa value={form.notes||""} onChange={v=>set("notes",v)} placeholder="Additional details..." />
+      </Fld>
+
+      <Fld label={`Attachments${needAttach?" (required)":""}`}>
+        <div style={{ border:`1px dashed ${C.border}`, borderRadius:8, padding:12,
+          background:C.grayLight, cursor:"pointer", textAlign:"center" }}
+          onClick={()=>fileRef.current?.click()}>
+          <input ref={fileRef} type="file" multiple style={{ display:"none" }}
+            onChange={e=>setFiles(Array.from(e.target.files))} />
+          <div style={{ fontSize:12, color:C.muted }}>
+            {files.length>0 ? files.map(f=>f.name).join(", ") : "Click to attach receipts / photos"}
+          </div>
+        </div>
+      </Fld>
+
+      <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+        <Btn variant="gray" onClick={onClose}>Cancel</Btn>
+        <Btn onClick={handleSubmit} disabled={!canSubmit||busy}>
+          {busy?"Submitting...":"Submit Request"}
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── REQUEST DETAIL ───────────────────────────────────────────────────────────
+function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const typeInfo  = REQ_TYPES[req.type]||{};
+  const chain     = quotas?.approvalChains?.[req.type] || DEFAULT_CHAINS[req.type] || ["assignee"];
+  const step      = req.currentStep||0;
+  const curRole   = chain[step];
+  const canAct    = req.status==="pending"||req.status==="in_progress";
+
+  const applicant = roster.find(r=>String(r.id)===String(req.applicantId));
+  const rosterMe  = roster.find(r=>r.email===meEmail);
+  const isAssignee= (quotas?.assignees?.[req.type]||[]).includes(meEmail);
+  const isManager = rosterMe && String(rosterMe.id)===String(applicant?.managerId);
+  const isCEO     = meEmail===(quotas?.ceoEmail||"");
+  const isSelf    = meEmail===req.applicantEmail;
+
+  const myTurn = canAct && (
+    (curRole==="assignee"&&isAssignee)||(curRole==="manager"&&isManager)||(curRole==="ceo"&&isCEO)
+  );
+
+  const act = async (action) => {
+    setBusy(true);
+    try { await onAction({ action, id:req.id, comment, step, role:curRole }); }
+    finally { setBusy(false); onClose(); }
+  };
+
+  return (
+    <Modal title={`${typeInfo.icon||"📋"} ${typeInfo.label||req.type}`} onClose={onClose} width={560}>
+      <div style={{ background:C.grayLight, borderRadius:8, padding:"12px 14px", marginBottom:16,
+        display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div>
+          <div style={{ fontWeight:700, fontSize:15 }}>{req.title}</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>
+            {applicant?.name||req.applicantEmail} · {req.submittedAt?new Date(req.submittedAt).toLocaleDateString():""}
+          </div>
+        </div>
+        <Badge status={req.status} />
+      </div>
+
+      {/* Chain progress */}
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:11, fontWeight:600, color:C.muted, marginBottom:6 }}>Approval Chain</div>
+        <div style={{ display:"flex", gap:4, alignItems:"center", flexWrap:"wrap" }}>
+          {chain.map((role,i)=>{
+            const done=i<step; const active=i===step&&canAct;
+            return (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:4 }}>
+                <span style={{ padding:"3px 10px", borderRadius:12, fontSize:11, fontWeight:600,
+                  background:done?C.successLight:active?C.primaryLight:C.grayLight,
+                  color:done?C.success:active?C.primary:C.gray,
+                  border:`1px solid ${done?C.success:active?C.primary:C.border}` }}>
+                  {done?"✓ ":""}{role.charAt(0).toUpperCase()+role.slice(1)}
+                </span>
+                {i<chain.length-1&&<span style={{ color:C.border }}>→</span>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Details grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12, fontSize:13 }}>
+        {req.destination&&<div><div style={{ fontSize:11,color:C.muted }}>Destination</div><strong>{req.destination}</strong></div>}
+        {req.startDate&&<div><div style={{ fontSize:11,color:C.muted }}>Period</div><strong>{req.startDate} ~ {req.endDate}</strong></div>}
+        {req.asset&&<div><div style={{ fontSize:11,color:C.muted }}>Asset/Location</div><strong>{req.asset}</strong></div>}
+        {req.amount&&<div><div style={{ fontSize:11,color:C.muted }}>Amount</div><strong>₩{Number(req.amount).toLocaleString()}</strong></div>}
+        {req.subType&&<div><div style={{ fontSize:11,color:C.muted }}>Sub Type</div><strong>{req.subType}</strong></div>}
+        {req.items?.length>0&&<div style={{ gridColumn:"span 2" }}><div style={{ fontSize:11,color:C.muted }}>Items</div><strong>{req.items.join(", ")}</strong></div>}
+      </div>
+
+      {req.notes&&<div style={{ background:C.grayLight,borderRadius:6,padding:10,marginBottom:12,fontSize:13 }}>{req.notes}</div>}
+
+      {req.attachments?.length>0&&(
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11,fontWeight:600,color:C.muted,marginBottom:4 }}>Attachments</div>
+          {req.attachments.map((url,i)=>(
+            <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display:"block",fontSize:12,color:C.primary }}>📎 Attachment {i+1}</a>
+          ))}
+        </div>
+      )}
+
+      {myTurn&&(
+        <div style={{ borderTop:`1px solid ${C.border}`,paddingTop:12,marginTop:4 }}>
+          <Fld label="Comment (optional)">
+            <Txa value={comment} onChange={setComment} placeholder="Add a comment..." rows={2} />
+          </Fld>
+          <div style={{ display:"flex",gap:8,justifyContent:"flex-end" }}>
+            <Btn variant="danger" onClick={()=>act("reject")} disabled={busy}>Reject</Btn>
+            <Btn onClick={()=>act("approve")} disabled={busy}>
+              {busy?"...":step===chain.length-1?"Complete":"Approve →"}
+            </Btn>
+          </div>
+        </div>
+      )}
+
+      {isSelf&&req.status==="pending"&&(
+        <div style={{ marginTop:12,textAlign:"right" }}>
+          <Btn variant="outline" onClick={()=>act("cancel")} disabled={busy}>Withdraw</Btn>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ─── MY REQUESTS ─────────────────────────────────────────────────────────────
+function MyRequests({ requests, meEmail, onNew, onSelect }) {
+  const [filter, setFilter] = useState("all");
+  const mine = useMemo(()=>requests.filter(r=>r.applicantEmail===meEmail).sort((a,b)=>new Date(b.submittedAt)-new Date(a.submittedAt)),[requests,meEmail]);
+  const list  = filter==="all" ? mine : mine.filter(r=>r.status===filter);
+
+  return (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+        <h2 style={{ fontSize:18,fontWeight:700,margin:0 }}>My Requests</h2>
+        <Btn onClick={onNew}>+ New Request</Btn>
+      </div>
+      <div style={{ display:"flex",gap:6,marginBottom:14,flexWrap:"wrap" }}>
+        {["all","pending","in_progress","approved","completed","rejected","cancelled"].map(s=>(
+          <button key={s} onClick={()=>setFilter(s)}
+            style={{ padding:"3px 11px",borderRadius:16,border:`1px solid ${filter===s?C.primary:C.border}`,
+              background:filter===s?C.primary:"#fff",color:filter===s?"#fff":C.text,cursor:"pointer",fontSize:12,fontWeight:600 }}>
+            {s==="all"?"All":STATUS[s]?.label||s}
+          </button>
+        ))}
+      </div>
+      {list.length===0?(
+        <div style={{ textAlign:"center",padding:"40px 20px",color:C.muted,background:C.grayLight,borderRadius:10 }}>
+          <div style={{ fontSize:32,marginBottom:8 }}>📭</div><div>No requests found</div>
+        </div>
+      ):(
+        <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+          {list.map(r=>{
+            const t=REQ_TYPES[r.type]||{};
+            return (
+              <div key={r.id} onClick={()=>onSelect(r)}
+                style={{ background:"#fff",border:`1px solid ${C.border}`,borderRadius:8,
+                  padding:"12px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12 }}
+                onMouseOver={e=>e.currentTarget.style.borderColor=C.primary}
+                onMouseOut={e=>e.currentTarget.style.borderColor=C.border}>
+                <span style={{ fontSize:22 }}>{t.icon||"📋"}</span>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontWeight:600,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{r.title}</div>
+                  <div style={{ fontSize:11,color:C.muted,marginTop:2 }}>{t.label} · {r.submittedAt?new Date(r.submittedAt).toLocaleDateString():""}</div>
+                </div>
+                <Badge status={r.status} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── APPROVALS ────────────────────────────────────────────────────────────────
+function Approvals({ requests, meEmail, roster, quotas, onSelect }) {
+  const rosterMe = roster.find(r=>r.email===meEmail);
+  const isCEO    = meEmail===(quotas?.ceoEmail||"");
+
+  const pending = useMemo(()=>{
+    return requests.filter(r=>{
+      if (r.status!=="pending"&&r.status!=="in_progress") return false;
+      if (r.applicantEmail===meEmail) return false;
+      const chain=(quotas?.approvalChains?.[r.type])||DEFAULT_CHAINS[r.type]||["assignee"];
+      const role=chain[r.currentStep||0];
+      const applicant=roster.find(u=>String(u.id)===String(r.applicantId));
+      if (role==="assignee") return (quotas?.assignees?.[r.type]||[]).includes(meEmail);
+      if (role==="manager")  return rosterMe&&String(rosterMe.id)===String(applicant?.managerId);
+      if (role==="ceo")      return isCEO;
+      return false;
+    }).sort((a,b)=>new Date(a.submittedAt)-new Date(b.submittedAt));
+  },[requests,meEmail,roster,quotas,rosterMe,isCEO]);
+
+  return (
+    <div>
+      <div style={{ marginBottom:14 }}>
+        <h2 style={{ fontSize:18,fontWeight:700,margin:0 }}>Pending Approvals</h2>
+        <div style={{ fontSize:12,color:C.muted,marginTop:4 }}>{pending.length} item(s) awaiting action</div>
+      </div>
+      {pending.length===0?(
+        <div style={{ textAlign:"center",padding:"40px 20px",color:C.muted,background:C.grayLight,borderRadius:10 }}>
+          <div style={{ fontSize:32,marginBottom:8 }}>✅</div><div>All clear</div>
+        </div>
+      ):(
+        <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+          {pending.map(r=>{
+            const t=REQ_TYPES[r.type]||{};
+            const applicant=roster.find(u=>String(u.id)===String(r.applicantId));
+            const waitH=Math.floor((Date.now()-new Date(r.submittedAt))/3600000);
+            return (
+              <div key={r.id} onClick={()=>onSelect(r)}
+                style={{ background:"#fff",border:`2px solid ${C.warning}`,borderRadius:8,
+                  padding:"12px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12 }}
+                onMouseOver={e=>e.currentTarget.style.background=C.warningLight}
+                onMouseOut={e=>e.currentTarget.style.background="#fff"}>
+                <span style={{ fontSize:22 }}>{t.icon||"📋"}</span>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontWeight:600,fontSize:13 }}>{r.title}</div>
+                  <div style={{ fontSize:11,color:C.muted,marginTop:2 }}>{t.label} · from {applicant?.name||r.applicantEmail}</div>
+                </div>
+                <div style={{ textAlign:"right",flexShrink:0 }}>
+                  <Badge status={r.status} />
+                  <div style={{ fontSize:10,color:C.muted,marginTop:3 }}>Waiting {waitH>0?`${waitH}h`:"<1h"}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ANALYTICS ────────────────────────────────────────────────────────────────
+function Analytics({ requests }) {
+  const [range, setRange] = useState("30");
+  const cutoff = useMemo(()=>new Date(Date.now()-Number(range)*86400000),[range]);
+  const inRange = useMemo(()=>requests.filter(r=>new Date(r.submittedAt)>=cutoff),[requests,cutoff]);
+
+  const byCat  = useMemo(()=>{ const c={}; inRange.forEach(r=>{ const k=REQ_TYPES[r.type]?.cat||"other"; c[k]=(c[k]||0)+1; }); return c; },[inRange]);
+  const byType = useMemo(()=>{ const c={}; inRange.forEach(r=>{ c[r.type]=(c[r.type]||0)+1; }); return Object.entries(c).sort((a,b)=>b[1]-a[1]).slice(0,8); },[inRange]);
+
+  const total    = inRange.length;
+  const approved = inRange.filter(r=>r.status==="approved"||r.status==="completed").length;
+
+  return (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+        <h2 style={{ fontSize:18,fontWeight:700,margin:0 }}>Analytics</h2>
+        <select value={range} onChange={e=>setRange(e.target.value)} style={{ ...inputStyle, width:"auto" }}>
+          <option value="7">Last 7 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="365">Last year</option>
+        </select>
+      </div>
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:18 }}>
+        {[
+          { label:"Total",   value:total,   icon:"📋" },
+          { label:"Approved",value:approved, icon:"✅" },
+          { label:"Rate",    value:`${total>0?Math.round(approved/total*100):0}%`, icon:"📈" },
+          { label:"Pending", value:inRange.filter(r=>r.status==="pending"||r.status==="in_progress").length, icon:"⏳" },
+        ].map(k=>(
+          <div key={k.label} style={{ background:"#fff",border:`1px solid ${C.border}`,borderRadius:8,padding:"14px 10px",textAlign:"center" }}>
+            <div style={{ fontSize:22 }}>{k.icon}</div>
+            <div style={{ fontSize:20,fontWeight:700,color:C.primary }}>{k.value}</div>
+            <div style={{ fontSize:11,color:C.muted }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:14 }}>
+        <div style={{ background:"#fff",border:`1px solid ${C.border}`,borderRadius:8,padding:14 }}>
+          <div style={{ fontWeight:600,fontSize:13,marginBottom:10 }}>By Category</div>
+          <Doughnut data={{
+            labels:Object.keys(byCat).map(k=>REQ_CATEGORIES[k]?.label||k),
+            datasets:[{data:Object.values(byCat),backgroundColor:["#1d4ed8","#16a34a","#d97706","#9333ea"]}],
+          }} options={{ plugins:{ legend:{ position:"bottom" } },maintainAspectRatio:true }} />
+        </div>
+        <div style={{ background:"#fff",border:`1px solid ${C.border}`,borderRadius:8,padding:14 }}>
+          <div style={{ fontWeight:600,fontSize:13,marginBottom:10 }}>Top Request Types</div>
+          <Bar data={{
+            labels:byType.map(([t])=>REQ_TYPES[t]?.label||t),
+            datasets:[{data:byType.map(([,v])=>v),backgroundColor:"#1d4ed8"}],
+          }} options={{ indexAxis:"y",plugins:{legend:{display:false}},maintainAspectRatio:true }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ADMIN ────────────────────────────────────────────────────────────────────
+function Admin({ quotas, roster, onSaveQuotas }) {
+  const [sub,   setSub]   = useState("assignees");
+  const [lq,    setLq]    = useState(()=>JSON.parse(JSON.stringify(quotas||{})));
+  const [saving,setSaving]= useState(false);
+
+  useEffect(()=>setLq(JSON.parse(JSON.stringify(quotas||{}))),[quotas]);
+
+  const setQ = (k,v) => setLq(p=>({...p,[k]:v}));
+
+  const save = async () => { setSaving(true); await onSaveQuotas(lq); setSaving(false); };
+
+  const SUBTABS = ["assignees","chains","roster","settings"];
+  const ROLES   = ["manager","ceo","assignee"];
+
+  return (
+    <div>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+        <h2 style={{ fontSize:18,fontWeight:700,margin:0 }}>Admin</h2>
+        <Btn onClick={save} disabled={saving}>{saving?"Saving...":"Save All"}</Btn>
+      </div>
+      <div style={{ display:"flex",gap:2,borderBottom:`1px solid ${C.border}`,marginBottom:16 }}>
+        {SUBTABS.map(t=>(
+          <button key={t} onClick={()=>setSub(t)}
+            style={{ padding:"8px 14px",border:"none",background:"none",cursor:"pointer",
+              fontWeight:sub===t?700:400,borderBottom:sub===t?`2px solid ${C.primary}`:"2px solid transparent",
+              color:sub===t?C.primary:C.text,fontSize:13,textTransform:"capitalize" }}>{t}</button>
+        ))}
+      </div>
+
+      {sub==="assignees"&&(()=>{
+        const a=lq.assignees||{};
+        return (
+          <div>
+            <p style={{ fontSize:12,color:C.muted,marginTop:0 }}>Who handles each request type (comma-separated emails)</p>
+            {Object.entries(REQ_TYPES).map(([k,t])=>(
+              <div key={k} style={{ marginBottom:10,display:"grid",gridTemplateColumns:"220px 1fr",alignItems:"center",gap:10 }}>
+                <div style={{ fontSize:13 }}><span style={{ marginRight:6 }}>{t.icon}</span>{t.label}</div>
+                <Inp value={(a[k]||[]).join(", ")} onChange={v=>setQ("assignees",{...a,[k]:v.split(",").map(e=>e.trim()).filter(Boolean)})}
+                  placeholder="email@sr.ai, ..." />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
+      {sub==="chains"&&(()=>{
+        const ch=lq.approvalChains||{};
+        return (
+          <div>
+            <p style={{ fontSize:12,color:C.muted,marginTop:0 }}>Toggle approval steps per request type</p>
+            {Object.entries(REQ_TYPES).map(([k,t])=>{
+              const chain=ch[k]||DEFAULT_CHAINS[k]||["assignee"];
+              return (
+                <div key={k} style={{ marginBottom:10,padding:"10px 12px",border:`1px solid ${C.border}`,borderRadius:8 }}>
+                  <div style={{ fontSize:13,fontWeight:600,marginBottom:8 }}>{t.icon} {t.label}</div>
+                  <div style={{ display:"flex",gap:6 }}>
+                    {ROLES.map(role=>{
+                      const on=chain.includes(role);
+                      return (
+                        <button key={role} onClick={()=>{
+                          const base=on?chain.filter(r=>r!==role):[...chain,role];
+                          const sorted=[...["manager","ceo"].filter(r=>base.includes(r)),...(base.includes("assignee")?["assignee"]:[])];
+                          setQ("approvalChains",{...ch,[k]:sorted});
+                        }} style={{ padding:"3px 10px",borderRadius:12,border:`1px solid ${on?C.primary:C.border}`,
+                          background:on?C.primaryLight:"#fff",color:on?C.primary:C.gray,cursor:"pointer",fontSize:12,fontWeight:600 }}>
+                          {on?"✓ ":""}{role.charAt(0).toUpperCase()+role.slice(1)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {sub==="roster"&&(
+        <div style={{ overflowX:"auto" }}>
+          <p style={{ fontSize:12,color:C.muted,marginTop:0 }}>Loaded from Sheets (read-only)</p>
+          <table style={{ width:"100%",borderCollapse:"collapse",fontSize:12 }}>
+            <thead><tr style={{ background:C.grayLight }}>
+              {["ID","Name","Email","Team","Manager ID"].map(h=>(
+                <th key={h} style={{ padding:"6px 10px",textAlign:"left",borderBottom:`1px solid ${C.border}`,fontWeight:600 }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>{roster.map(r=>(
+              <tr key={r.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                <td style={{ padding:"6px 10px" }}>{r.id}</td>
+                <td style={{ padding:"6px 10px" }}>{r.name}</td>
+                <td style={{ padding:"6px 10px" }}>{r.email}</td>
+                <td style={{ padding:"6px 10px" }}>{r.team}</td>
+                <td style={{ padding:"6px 10px" }}>{r.managerId||"-"}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
+      {sub==="settings"&&(
+        <div>
+          {[
+            { label:"CEO Email",          key:"ceoEmail",       ph:"ceo@sr.ai" },
+            { label:"Slack Webhook URL",  key:"slackWebhook",   ph:"https://hooks.slack.com/..." },
+            { label:"App URL",            key:"appUrl",         ph:"https://sr-ga-support.vercel.app" },
+            { label:"Drive Folder ID",    key:"driveFolderId",  ph:"Google Drive folder ID for attachments" },
+          ].map(f=>(
+            <Fld key={f.key} label={f.label}>
+              <Inp value={lq[f.key]||""} onChange={v=>setQ(f.key,v)} placeholder={f.ph} />
+            </Fld>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── APP ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  const { user, logout } = useAuth();
+  const isMobile = useIsMobile();
+
+  const [tab,      setTab]      = useState("my");
+  const [requests, setRequests] = useState([]);
+  const [roster,   setRoster]   = useState([]);
+  const [quotas,   setQuotas]   = useState({});
+  const [toast,    setToast]    = useState(null);
+  const [showNew,  setShowNew]  = useState(false);
+  const [selected, setSelected] = useState(null);
+
+  const pendingIds = useRef(new Set());
+  const notify = useCallback((msg,type="info")=>setToast({msg,type}),[]);
+
+  const loadData = useCallback(async () => {
+    if (!APPS_SCRIPT_URL) return;
+    try {
+      const [rd,qd,rod] = await Promise.all([get("get_requests"),get("get_quotas"),get("get_roster")]);
+      if (rd.ok)  setRequests(prev=>(rd.data||[]).map(r=>pendingIds.current.has(r.id)?(prev.find(p=>p.id===r.id)||r):r));
+      if (qd.ok)  setQuotas(qd.data||{});
+      if (rod.ok) setRoster(rod.data||[]);
+    } catch { notify("Sync failed","error"); }
+  },[notify]);
+
+  useEffect(()=>{
+    if (!user) return;
+    loadData();
+    const t=setInterval(loadData,30000);
+    return ()=>clearInterval(t);
+  },[user,loadData]);
+
+  // Deep-link: ?new=1
+  useEffect(()=>{
+    const p=new URLSearchParams(window.location.search);
+    if (p.get("new")==="1"){ setShowNew(true); window.history.replaceState(null,"",window.location.pathname); }
+  },[]);
+
+  const meEmail  = user?.email||"";
+  const isAdmin  = (quotas?.adminEmails||[]).includes(meEmail)||meEmail===(quotas?.ceoEmail||"");
+
+  const pendingCount = useMemo(()=>{
+    const rMe=roster.find(r=>r.email===meEmail);
+    return requests.filter(r=>{
+      if (r.status!=="pending"&&r.status!=="in_progress") return false;
+      if (r.applicantEmail===meEmail) return false;
+      const chain=(quotas?.approvalChains?.[r.type])||DEFAULT_CHAINS[r.type]||["assignee"];
+      const role=chain[r.currentStep||0];
+      const ap=roster.find(u=>String(u.id)===String(r.applicantId));
+      if (role==="assignee") return (quotas?.assignees?.[r.type]||[]).includes(meEmail);
+      if (role==="manager")  return rMe&&String(rMe.id)===String(ap?.managerId);
+      if (role==="ceo")      return meEmail===(quotas?.ceoEmail||"");
+      return false;
+    }).length;
+  },[requests,meEmail,roster,quotas]);
+
+  const handleSubmit = async (data) => {
+    const ap=roster.find(r=>r.email===meEmail);
+    const req={ id:`req_${Date.now()}`, ...data,
+      applicantEmail:meEmail, applicantId:ap?.id||"",
+      status:"pending", currentStep:0, submittedAt:new Date().toISOString() };
+    pendingIds.current.add(req.id);
+    setRequests(prev=>[req,...prev]);
+    try {
+      const res=await post({ action:"save_request", data:req });
+      if (!res.ok) throw new Error(res.error||"Failed");
+      notify("Request submitted!","success");
+    } catch(e) {
+      notify("Submit failed: "+e.message,"error");
+      setRequests(prev=>prev.filter(r=>r.id!==req.id));
+    } finally {
+      pendingIds.current.delete(req.id);
+      setTimeout(loadData,2000);
+    }
+  };
+
+  const handleAction = async ({ action, id, comment, step, role }) => {
+    pendingIds.current.add(id);
+    setRequests(prev=>prev.map(r=>{
+      if (r.id!==id) return r;
+      if (action==="approve"){
+        const chain=(quotas?.approvalChains?.[r.type])||DEFAULT_CHAINS[r.type]||["assignee"];
+        const next=step+1;
+        return { ...r, currentStep:next, status:next>=chain.length?"completed":"in_progress" };
+      }
+      if (action==="reject") return { ...r, status:"rejected" };
+      if (action==="cancel") return { ...r, status:"cancelled" };
+      return r;
+    }));
+    try {
+      const res=await post({ action:"update_request", id, decision:action, comment, step, role });
+      if (!res.ok) throw new Error(res.error||"Failed");
+      notify(action==="approve"?"Approved!":action==="reject"?"Rejected":"Withdrawn","success");
+    } catch(e) { notify("Action failed: "+e.message,"error"); }
+    finally {
+      pendingIds.current.delete(id);
+      setTimeout(loadData,2500);
+    }
+  };
+
+  const handleSaveQuotas = async (data) => {
+    try {
+      const res=await post({ action:"save_quotas", data });
+      if (!res.ok) throw new Error(res.error||"Failed");
+      setQuotas(data);
+      notify("Settings saved!","success");
+    } catch(e) { notify("Save failed: "+e.message,"error"); }
+  };
+
+  const TABS = [
+    { key:"my",        label:"My Requests", icon:"📋" },
+    { key:"approvals", label:"Approvals",   icon:"✅", badge:pendingCount },
+    { key:"analytics", label:"Analytics",   icon:"📊" },
+    ...(isAdmin?[{ key:"admin", label:"Admin", icon:"⚙️" }]:[]),
+  ];
+
+  if (!user) return (
+    <div style={{ minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",
+      background:"linear-gradient(135deg,#1d4ed8 0%,#0f172a 100%)" }}>
+      <div style={{ background:"#fff",borderRadius:16,padding:"40px 36px",width:"100%",maxWidth:380,
+        textAlign:"center",boxShadow:"0 20px 60px rgba(0,0,0,.4)" }}>
+        <div style={{ fontSize:48,marginBottom:12 }}>🏢</div>
+        <h1 style={{ fontSize:22,fontWeight:800,margin:"0 0 4px" }}>GA Support</h1>
+        <p style={{ color:C.muted,fontSize:13,margin:"0 0 28px" }}>Seoul Robotics General Affairs</p>
+        <a href={buildOAuthUrl()}
+          style={{ display:"block",background:C.primary,color:"#fff",padding:"12px 0",
+            borderRadius:8,fontWeight:700,fontSize:14,textDecoration:"none" }}>
+          Sign in with Google
+        </a>
+        <p style={{ color:C.muted,fontSize:11,marginTop:16 }}>{VERSION} · SR employees only</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight:"100vh",background:C.bg,fontFamily:"-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
+      <div style={{ background:C.primary,color:"#fff",padding:"0 20px",
+        display:"flex",alignItems:"center",justifyContent:"space-between",height:52,
+        position:"sticky",top:0,zIndex:100 }}>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          <span style={{ fontSize:20 }}>🏢</span>
+          <strong style={{ fontSize:15 }}>GA Support</strong>
+          <span style={{ fontSize:11,opacity:.7 }}>{VERSION}</span>
+        </div>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          {!isMobile&&<span style={{ fontSize:12,opacity:.8 }}>{user.name}</span>}
+          <button onClick={logout} style={{ background:"rgba(255,255,255,.15)",border:"none",
+            color:"#fff",padding:"4px 10px",borderRadius:4,cursor:"pointer",fontSize:12 }}>Sign out</button>
+        </div>
+      </div>
+
+      <div style={{ background:"#fff",borderBottom:`1px solid ${C.border}`,display:"flex",overflowX:"auto",padding:"0 16px" }}>
+        {TABS.map(t=>(
+          <button key={t.key} onClick={()=>setTab(t.key)}
+            style={{ padding:"12px 16px",border:"none",background:"none",cursor:"pointer",whiteSpace:"nowrap",
+              fontWeight:tab===t.key?700:400,borderBottom:tab===t.key?`2px solid ${C.primary}`:"2px solid transparent",
+              color:tab===t.key?C.primary:C.text,fontSize:13,display:"flex",alignItems:"center",gap:5 }}>
+            <span>{t.icon}</span>
+            {!isMobile&&<span>{t.label}</span>}
+            {t.badge>0&&<span style={{ background:C.danger,color:"#fff",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:700 }}>{t.badge}</span>}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ maxWidth:860,margin:"0 auto",padding:"20px 16px" }}>
+        {tab==="my"&&<MyRequests requests={requests} meEmail={meEmail} onNew={()=>setShowNew(true)} onSelect={setSelected} />}
+        {tab==="approvals"&&<Approvals requests={requests} meEmail={meEmail} roster={roster} quotas={quotas} onSelect={setSelected} />}
+        {tab==="analytics"&&<Analytics requests={requests} />}
+        {tab==="admin"&&isAdmin&&<Admin quotas={quotas} roster={roster} onSaveQuotas={handleSaveQuotas} />}
+      </div>
+
+      {showNew&&<NewRequestModal onClose={()=>setShowNew(false)} onSubmit={handleSubmit} roster={roster} quotas={quotas} user={user} />}
+      {selected&&<RequestDetail req={selected} onClose={()=>setSelected(null)} onAction={handleAction} meEmail={meEmail} roster={roster} quotas={quotas} />}
+      {toast&&<Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)} />}
+    </div>
+  );
+}
