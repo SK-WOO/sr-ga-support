@@ -108,7 +108,7 @@ function useAuth() {
   const [user, setUser] = useState(() => {
     try {
       const u = JSON.parse(localStorage.getItem("ga_user") || "null");
-      if (u && u.exp && u.exp * 1000 < Date.now()) { localStorage.removeItem("ga_user"); return null; }
+      if (u && (!u.exp || u.exp * 1000 < Date.now())) { localStorage.removeItem("ga_user"); return null; }
       return u;
     } catch { return null; }
   });
