@@ -52,7 +52,7 @@ const DEFAULT_CHAINS = {
 };
 
 const ONBOARDING_ITEMS = ["PC / Laptop","Monitor","Uniform","Sticker","Crocs","Desk Chair","Access Card","Other"];
-const TRAVEL_SUBS_DOMESTIC = ["Hotel","Transportation","Other","Expense Claim"];
+const TRAVEL_SUBS_DOMESTIC = ["Airfare","Hotel","Transportation","Other","Expense Claim"];
 const TRAVEL_SUBS_OVERSEAS = ["Airfare","Hotel","Transportation","Other","Expense Claim"];
 
 const C = {
