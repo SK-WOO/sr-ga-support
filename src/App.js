@@ -305,7 +305,12 @@ function ProgressBoard({ requests, roster, quotas, onSelect }) {
           const t     = REQ_TYPES[r.type] || {};
           const chain = (quotas?.approvalChains?.[r.type]) || DEFAULT_CHAINS[r.type] || ["assignee"];
           const step  = r.currentStep || 0;
-          const waitH = Math.floor((Date.now() - new Date(r.submittedAt)) / 3600000);
+          const sub    = new Date(r.submittedAt);
+          const diffMs = Date.now() - sub;
+          const diffH  = Math.floor(diffMs / 3600000);
+          const diffD  = Math.floor(diffMs / 86400000);
+          const sameDay = new Date().toDateString() === sub.toDateString();
+          const waitLabel = sameDay ? (diffH > 0 ? `${diffH}h 경과` : "방금 전") : `${diffD}일 경과`;
           return (
             <div key={r.id} onClick={() => onSelect(r)}
               style={{ background:"#fff", border:`1px solid ${C.border}`, borderRadius:10,
@@ -317,7 +322,7 @@ function ProgressBoard({ requests, roster, quotas, onSelect }) {
                   <span style={{ fontSize:18 }}>{t.icon || "📋"}</span>
                   <div style={{ minWidth:0 }}>
                     <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.title}</div>
-                    <div style={{ fontSize:11, color:C.muted }}>{t.label} · {waitH > 0 ? `${waitH}h 경과` : "방금 전"}</div>
+                    <div style={{ fontSize:11, color:C.muted }}>{t.label} · {waitLabel}</div>
                   </div>
                 </div>
                 <Badge status={r.status} />
