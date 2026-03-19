@@ -303,11 +303,12 @@ function sendApprovalSlack(ss, rowData, headers, decision, comment, isCompleted)
     const webhook = quotas.slackWebhook;
     if (!webhook) return;
     const appUrl = quotas.appUrl || "";
-    const title  = rowData[headers.indexOf("title")] || "";
+    const title     = rowData[headers.indexOf("title")]          || "";
+    const applicant = rowData[headers.indexOf("applicantEmail")] || "";
     const icon   = decision === "approved" ? (isCompleted ? "✅" : "⏩") : "❌";
     const status = decision === "approved" ? (isCompleted ? "Completed" : "Approved — next step") : "Rejected";
     const blocks2 = [
-      { type:"section", text:{ type:"mrkdwn", text:`${icon} *Request Update*\n*Title:* ${title}\n*Status:* ${status}${comment?`\n*Comment:* ${comment}`:""}` } },
+      { type:"section", text:{ type:"mrkdwn", text:`${icon} *Request Update*\n*Title:* ${title}\n*Applicant:* ${applicant}\n*Status:* ${status}${comment?`\n*Comment:* ${comment}`:""}` } },
     ];
     if (appUrl) blocks2.push({ type:"actions", elements:[{ type:"button", text:{ type:"plain_text", text:"Open App" }, url:appUrl }] });
     const payload = { text:`${icon} *Request Update* — ${title}`, blocks:blocks2 };

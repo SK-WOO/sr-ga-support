@@ -8,7 +8,7 @@ import {
 import { Doughnut, Bar } from "react-chartjs-2";
 ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend);
 
-const VERSION         = "v0.3.1";
+const VERSION         = "v0.3.2";
 const BUILD_DATE      = "2026-03-18";
 const SR_GATE_URL     = "https://sr-gate.vercel.app";
 const MANUAL_URL_EN   = "https://github.com/SK-WOO/sr-ga-support/blob/master/docs/manual_en.md";
@@ -52,7 +52,8 @@ const DEFAULT_CHAINS = {
 };
 
 const ONBOARDING_ITEMS = ["PC / Laptop","Monitor","Uniform","Sticker","Crocs","Desk Chair","Access Card","Other"];
-const TRAVEL_SUBS = ["Airfare","Hotel","Transportation","Other","Expense Claim"];
+const TRAVEL_SUBS_DOMESTIC = ["Hotel","Transportation","Other","Expense Claim"];
+const TRAVEL_SUBS_OVERSEAS = ["Airfare","Hotel","Transportation","Other","Expense Claim"];
 
 const C = {
   primary:"#1d4ed8", primaryLight:"#dbeafe",
@@ -352,9 +353,10 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
   const [cat,      setCat]      = useState("");
   const [type,     setType]     = useState("");
   const [form,     setForm]     = useState({});
-  const [files,    setFiles]    = useState([]);
-  const [busy,     setBusy]     = useState(false);
-  const [onBehalf, setOnBehalf] = useState(false);
+  const [files,      setFiles]      = useState([]);
+  const [busy,       setBusy]       = useState(false);
+  const [uploadMsg,  setUploadMsg]  = useState("");
+  const [onBehalf,   setOnBehalf]   = useState(false);
   const [targets,  setTargets]  = useState([]);
   const fileRef = useRef();
 
@@ -379,12 +381,13 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
   const handleSubmit = async () => {
     setBusy(true);
     try {
-      // FIX 2: store as {url, name} objects for filename display
       const uploaded = [];
-      for (const f of files) {
-        try { const r = await uploadFileViaScript(f); uploaded.push(r); }
-        catch { uploaded.push({ url:"", name:f.name }); }
+      for (let i = 0; i < files.length; i++) {
+        setUploadMsg(`파일 업로드 중 (${i+1}/${files.length})...`);
+        try { const r = await uploadFileViaScript(files[i]); uploaded.push(r); }
+        catch { uploaded.push({ url:"", name:files[i].name }); }
       }
+      setUploadMsg("");
       const attachments = uploaded.map(u => ({ url:u.url, name:u.name })).filter(u => u.url);
       const baseData = { type, category:cat, ...form, attachments };
       await onSubmit(baseData, onBehalf && targets.length > 0 ? targets : []);
@@ -454,7 +457,8 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
       {(type === "domestic_trip" || type === "overseas_trip") && (
         <>
           <Fld label="Travel Support Type" required>
-            <Sel value={form.subType || ""} onChange={v => set("subType", v)} options={TRAVEL_SUBS} placeholder="Select..." />
+            <Sel value={form.subType || ""} onChange={v => set("subType", v)}
+              options={type === "overseas_trip" ? TRAVEL_SUBS_OVERSEAS : TRAVEL_SUBS_DOMESTIC} placeholder="Select..." />
           </Fld>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
             <Fld label="Departure" required><Inp type="date" value={form.startDate||""} onChange={v=>set("startDate",v)} /></Fld>
@@ -534,7 +538,7 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
       <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:14 }}>
         <Btn variant="gray" onClick={onClose}>Cancel</Btn>
         <Btn onClick={handleSubmit} disabled={!canSubmit || busy}>
-          {busy ? "Submitting..." : onBehalf && targets.length > 0 ? `Submit for ${targets.length} people` : "Submit Request"}
+          {uploadMsg || (busy ? "Submitting..." : onBehalf && targets.length > 0 ? `Submit for ${targets.length} people` : "Submit Request")}
         </Btn>
       </div>
     </Modal>
@@ -543,8 +547,9 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
 
 // ─── REQUEST DETAIL ──────────────────────────────────────────────────────────
 function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
-  const [comment, setComment] = useState("");
-  const [busy,    setBusy]    = useState(false);
+  const [comment,     setComment]     = useState("");
+  const [busy,        setBusy]        = useState(false);
+  const [confirmAppr, setConfirmAppr] = useState(false);
 
   const typeInfo = REQ_TYPES[req.type] || {};
   const chain    = quotas?.approvalChains?.[req.type] || DEFAULT_CHAINS[req.type] || ["assignee"];
@@ -664,12 +669,24 @@ function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
           <Fld label="Comment (반려 시 필수)">
             <Txa value={comment} onChange={setComment} placeholder="Add a comment..." rows={2} />
           </Fld>
-          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-            <Btn variant="danger" onClick={() => act("reject")} disabled={busy || !comment.trim()}>Reject</Btn>
-            <Btn onClick={() => act("approve")} disabled={busy}>
-              {busy ? "..." : step === chain.length - 1 ? "Complete" : "Approve →"}
-            </Btn>
-          </div>
+          {confirmAppr ? (
+            <div style={{ background:C.primaryLight, borderRadius:8, padding:"10px 12px", marginBottom:8 }}>
+              <div style={{ fontSize:13, fontWeight:600, marginBottom:8 }}>승인하시겠습니까?</div>
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <Btn variant="gray" onClick={() => setConfirmAppr(false)} disabled={busy}>취소</Btn>
+                <Btn onClick={() => act("approve")} disabled={busy}>
+                  {busy ? "..." : "확인"}
+                </Btn>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+              <Btn variant="danger" onClick={() => act("reject")} disabled={busy || !comment.trim()}>Reject</Btn>
+              <Btn onClick={() => setConfirmAppr(true)} disabled={busy}>
+                {step === chain.length - 1 ? "Complete" : "Approve →"}
+              </Btn>
+            </div>
+          )}
         </div>
       )}
 
@@ -684,12 +701,26 @@ function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
 
 // ─── MY REQUESTS ─────────────────────────────────────────────────────────────
 function MyRequests({ requests, meEmail, roster, onNew, onSelect }) {
-  const [filter, setFilter] = useState("all");
+  const [filter,  setFilter]  = useState("all");
+  const [search,  setSearch]  = useState("");
+  const [typeF,   setTypeF]   = useState("all");
+
   const mine = useMemo(() =>
     requests.filter(r => r.applicantEmail === meEmail)
       .sort((a,b) => new Date(b.submittedAt) - new Date(a.submittedAt))
   , [requests, meEmail]);
-  const list = filter === "all" ? mine : mine.filter(r => r.status === filter);
+
+  const list = useMemo(() => mine.filter(r => {
+    if (filter !== "all" && r.status !== filter) return false;
+    if (typeF   !== "all" && r.type   !== typeF)  return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      if (!r.title?.toLowerCase().includes(q) && !REQ_TYPES[r.type]?.label.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  }), [mine, filter, typeF, search]);
+
+  const usedTypes = useMemo(() => [...new Set(mine.map(r => r.type))], [mine]);
 
   return (
     <div>
@@ -697,16 +728,38 @@ function MyRequests({ requests, meEmail, roster, onNew, onSelect }) {
         <h2 style={{ fontSize:18, fontWeight:700, margin:0 }}>My Requests</h2>
         <Btn onClick={onNew}>+ New Request</Btn>
       </div>
-      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
-        {["all","pending","in_progress","approved","completed","rejected","cancelled"].map(s => (
-          <button key={s} onClick={() => setFilter(s)}
-            style={{ padding:"3px 11px", borderRadius:16,
-              border:`1px solid ${filter===s?C.primary:C.border}`,
-              background:filter===s?C.primary:"#fff", color:filter===s?"#fff":C.text,
-              cursor:"pointer", fontSize:12, fontWeight:600 }}>
-            {s === "all" ? "All" : STATUS[s]?.label || s}
-          </button>
-        ))}
+      <div style={{ marginBottom:10 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="제목 또는 유형 검색..."
+          style={{ ...inputStyle, marginBottom:8 }} />
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:6 }}>
+          {["all","pending","in_progress","completed","rejected","cancelled"].map(s => (
+            <button key={s} onClick={() => setFilter(s)}
+              style={{ padding:"3px 11px", borderRadius:16,
+                border:`1px solid ${filter===s?C.primary:C.border}`,
+                background:filter===s?C.primary:"#fff", color:filter===s?"#fff":C.text,
+                cursor:"pointer", fontSize:12, fontWeight:600 }}>
+              {s === "all" ? "All Status" : STATUS[s]?.label || s}
+            </button>
+          ))}
+        </div>
+        {usedTypes.length > 0 && (
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            <button onClick={() => setTypeF("all")}
+              style={{ padding:"3px 11px", borderRadius:16,
+                border:`1px solid ${typeF==="all"?C.purple:C.border}`,
+                background:typeF==="all"?C.purple:"#fff", color:typeF==="all"?"#fff":C.text,
+                cursor:"pointer", fontSize:12, fontWeight:600 }}>All Types</button>
+            {usedTypes.map(t => (
+              <button key={t} onClick={() => setTypeF(t)}
+                style={{ padding:"3px 11px", borderRadius:16,
+                  border:`1px solid ${typeF===t?C.purple:C.border}`,
+                  background:typeF===t?C.purple:"#fff", color:typeF===t?"#fff":C.text,
+                  cursor:"pointer", fontSize:12, fontWeight:600 }}>
+                {REQ_TYPES[t]?.icon} {REQ_TYPES[t]?.label || t}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       {list.length === 0 ? (
         <div style={{ textAlign:"center", padding:"40px 20px", color:C.muted, background:C.grayLight, borderRadius:10 }}>
@@ -849,17 +902,23 @@ function Analytics({ requests, roster, meEmail, quotas }) {
       <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:14, marginBottom:14 }}>
         <div style={{ background:"#fff", border:`1px solid ${C.border}`, borderRadius:8, padding:14 }}>
           <div style={{ fontWeight:600, fontSize:13, marginBottom:10 }}>By Category</div>
-          <Doughnut data={{
-            labels: Object.keys(byCat).map(k => REQ_CATEGORIES[k]?.label || k),
-            datasets: [{ data:Object.values(byCat), backgroundColor:["#1d4ed8","#16a34a","#d97706","#9333ea"] }],
-          }} options={{ plugins:{ legend:{ position:"bottom" } }, maintainAspectRatio:true }} />
+          {Object.keys(byCat).length === 0
+            ? <div style={{ textAlign:"center", padding:"32px 0", color:C.muted, fontSize:13 }}>데이터 없음</div>
+            : <Doughnut data={{
+                labels: Object.keys(byCat).map(k => REQ_CATEGORIES[k]?.label || k),
+                datasets: [{ data:Object.values(byCat), backgroundColor:["#1d4ed8","#16a34a","#d97706","#9333ea"] }],
+              }} options={{ plugins:{ legend:{ position:"bottom" } }, maintainAspectRatio:true }} />
+          }
         </div>
         <div style={{ background:"#fff", border:`1px solid ${C.border}`, borderRadius:8, padding:14 }}>
           <div style={{ fontWeight:600, fontSize:13, marginBottom:10 }}>Top Request Types</div>
-          <Bar data={{
-            labels: byType.map(([t]) => REQ_TYPES[t]?.label || t),
-            datasets: [{ data:byType.map(([,v])=>v), backgroundColor:"#1d4ed8" }],
-          }} options={{ indexAxis:"y", plugins:{ legend:{ display:false } }, maintainAspectRatio:true }} />
+          {byType.length === 0
+            ? <div style={{ textAlign:"center", padding:"32px 0", color:C.muted, fontSize:13 }}>데이터 없음</div>
+            : <Bar data={{
+                labels: byType.map(([t]) => REQ_TYPES[t]?.label || t),
+                datasets: [{ data:byType.map(([,v])=>v), backgroundColor:"#1d4ed8" }],
+              }} options={{ indexAxis:"y", plugins:{ legend:{ display:false } }, maintainAspectRatio:true }} />
+          }
         </div>
       </div>
 
@@ -1084,6 +1143,12 @@ export default function App() {
     const t = setInterval(loadData, 30000);
     return () => clearInterval(t);
   }, [user, loadData]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const updated = requests.find(r => r.id === selected.id);
+    if (updated && updated !== selected) setSelected(updated);
+  }, [requests]);
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
