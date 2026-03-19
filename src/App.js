@@ -106,7 +106,11 @@ function parseJsonField(val) {
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 function useAuth() {
   const [user, setUser] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("ga_user") || "null"); } catch { return null; }
+    try {
+      const u = JSON.parse(localStorage.getItem("ga_user") || "null");
+      if (u && u.exp && u.exp * 1000 < Date.now()) { localStorage.removeItem("ga_user"); return null; }
+      return u;
+    } catch { return null; }
   });
   useEffect(() => {
     const hash = new URLSearchParams(window.location.hash.replace("#", "?").slice(1));
@@ -115,7 +119,7 @@ function useAuth() {
       try {
         const p = JSON.parse(atob(tok.split(".")[1]));
         if (p?.email && p.email.endsWith("@seoulrobotics.org") && (!p.exp || p.exp * 1000 > Date.now())) {
-          const u = { name: p.name, email: p.email, picture: p.picture };
+          const u = { name: p.name, email: p.email, picture: p.picture, exp: p.exp };
           setUser(u);
           localStorage.setItem("ga_user", JSON.stringify(u));
         }
@@ -1174,8 +1178,12 @@ function MobileMenu({ user, onLogout }) {
           <div onClick={() => setOpen(false)} style={{ position:"fixed", inset:0, zIndex:199 }} />
           <div style={{ position:"absolute", right:0, top:"calc(100% + 6px)", background:"#fff",
             borderRadius:8, boxShadow:"0 8px 24px rgba(0,0,0,.2)", zIndex:200, minWidth:160, overflow:"hidden" }}>
-            <div style={{ padding:"10px 14px", borderBottom:`1px solid ${C.border}`, fontSize:12, fontWeight:600, color:C.muted }}>
-              {user.name}
+            <div style={{ padding:"10px 14px", borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:8 }}>
+              {user.picture && <img src={user.picture} alt="" style={{ width:28, height:28, borderRadius:"50%" }} referrerPolicy="no-referrer" />}
+              <div>
+                <div style={{ fontSize:12, fontWeight:600, color:C.text }}>{user.name}</div>
+                <div style={{ fontSize:11, color:C.muted }}>{user.email}</div>
+              </div>
             </div>
             {[
               { label:"📖 Manual (KO)", href:MANUAL_URL_KO },
@@ -1396,6 +1404,7 @@ export default function App() {
           <MobileMenu user={user} onLogout={logout} />
         ) : (
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            {user.picture && <img src={user.picture} alt="" style={{ width:26, height:26, borderRadius:"50%", border:"2px solid rgba(255,255,255,.4)" }} referrerPolicy="no-referrer" />}
             <span style={{ fontSize:12, opacity:.8 }}>{user.name}</span>
             <a href={MANUAL_URL_KO} target="_blank" rel="noreferrer"
               style={{ background:"rgba(255,255,255,.15)", color:"#fff", padding:"4px 10px", borderRadius:4, fontSize:11, textDecoration:"none" }}>📖 KO</a>
