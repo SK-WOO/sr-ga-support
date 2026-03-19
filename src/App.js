@@ -11,8 +11,8 @@ ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScal
 const VERSION         = "v0.3.2";
 const BUILD_DATE      = "2026-03-18";
 const SR_GATE_URL     = "https://sr-gate.vercel.app";
-const MANUAL_URL_EN   = "https://github.com/SK-WOO/sr-ga-support/blob/master/docs/manual_en.md";
-const MANUAL_URL_KO   = "https://github.com/SK-WOO/sr-ga-support/blob/master/docs/manual_ko.md";
+const MANUAL_URL_EN   = "https://seoulrobotics.atlassian.net/wiki/spaces/~7120204b7d273e948148e7a6e61c8a943425b1/pages/3879501832";
+const MANUAL_URL_KO   = "https://seoulrobotics.atlassian.net/wiki/spaces/~7120204b7d273e948148e7a6e61c8a943425b1/pages/3879501832";
 const APPS_SCRIPT_URL = process.env.REACT_APP_SCRIPT_URL || "";
 const CLIENT_ID       = process.env.REACT_APP_CLIENT_ID  || "";
 
