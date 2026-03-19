@@ -1222,7 +1222,10 @@ export default function App() {
   const notify = useCallback((msg, type="info") => setToast({ msg, type }), []);
 
   const loadData = useCallback(async () => {
-    if (!APPS_SCRIPT_URL) return;
+    if (!APPS_SCRIPT_URL) {
+      if (initialLoad.current) { setLoading(false); initialLoad.current = false; }
+      return;
+    }
     try {
       const [rd, qd, rod] = await Promise.all([get("get_requests"), get("get_quotas"), get("get_roster")]);
       if (rd.ok)  setRequests(prev => (rd.data||[]).map(r => pendingIds.current.has(r.id) ? (prev.find(p=>p.id===r.id)||r) : r));
