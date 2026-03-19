@@ -266,6 +266,96 @@ function ReqCard({ req, roster, onClick }) {
   );
 }
 
+// ─── PROGRESS BOARD ──────────────────────────────────────────────────────────
+function resolveHolder(role, reqType, applicantId, roster, quotas) {
+  if (role === "assignee") {
+    const emails = (quotas?.assignees?.[reqType] || []);
+    if (emails.length === 0) return "담당자 미지정";
+    return emails.map(e => {
+      const r = roster.find(u => u.email === e);
+      return r ? r.name : e.split("@")[0];
+    }).join(", ");
+  }
+  if (role === "manager") {
+    const ap = roster.find(r => String(r.id) === String(applicantId));
+    const mg = ap ? roster.find(r => String(r.id) === String(ap.managerId)) : null;
+    return mg ? mg.name : "매니저 미지정";
+  }
+  if (role === "ceo") {
+    const ceo = roster.find(r => r.email === (quotas?.ceoEmail || ""));
+    return ceo ? ceo.name : "CEO";
+  }
+  return role;
+}
+
+function ProgressBoard({ requests, roster, quotas, onSelect }) {
+  const active = requests
+    .filter(r => r.status === "pending" || r.status === "in_progress")
+    .sort((a, b) => new Date(a.submittedAt) - new Date(b.submittedAt));
+
+  if (active.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom:20 }}>
+      <div style={{ fontSize:13, fontWeight:700, marginBottom:8, color:C.text }}>
+        진행 중인 요청 <span style={{ fontWeight:400, color:C.muted }}>({active.length})</span>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+        {active.map(r => {
+          const t     = REQ_TYPES[r.type] || {};
+          const chain = (quotas?.approvalChains?.[r.type]) || DEFAULT_CHAINS[r.type] || ["assignee"];
+          const step  = r.currentStep || 0;
+          const waitH = Math.floor((Date.now() - new Date(r.submittedAt)) / 3600000);
+          return (
+            <div key={r.id} onClick={() => onSelect(r)}
+              style={{ background:"#fff", border:`1px solid ${C.border}`, borderRadius:10,
+                padding:"12px 14px", cursor:"pointer" }}
+              onMouseOver={e => e.currentTarget.style.borderColor = C.primary}
+              onMouseOut={e  => e.currentTarget.style.borderColor = C.border}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:10 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                  <span style={{ fontSize:18 }}>{t.icon || "📋"}</span>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.title}</div>
+                    <div style={{ fontSize:11, color:C.muted }}>{t.label} · {waitH > 0 ? `${waitH}h 경과` : "방금 전"}</div>
+                  </div>
+                </div>
+                <Badge status={r.status} />
+              </div>
+              <div style={{ display:"flex", alignItems:"flex-start", gap:4 }}>
+                {chain.map((role, i) => {
+                  const done   = i < step;
+                  const active = i === step;
+                  const holder = resolveHolder(role, r.type, r.applicantId, roster, quotas);
+                  return (
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:4, flex:1, minWidth:0 }}>
+                      <div style={{ flex:1, minWidth:0, textAlign:"center" }}>
+                        <div style={{ padding:"3px 6px", borderRadius:8, fontSize:11, fontWeight:600, marginBottom:3,
+                          background:done?C.successLight:active?C.primaryLight:C.grayLight,
+                          color:done?C.success:active?C.primary:C.muted,
+                          border:`1px solid ${done?C.success:active?C.primary:C.border}` }}>
+                          {done ? "✓ " : active ? "● " : ""}{role.charAt(0).toUpperCase()+role.slice(1)}
+                        </div>
+                        <div style={{ fontSize:10, color:done?C.success:active?C.primary:C.muted,
+                          fontWeight:active?600:400, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {holder}
+                        </div>
+                      </div>
+                      {i < chain.length - 1 && (
+                        <div style={{ fontSize:10, color:done?C.success:C.border, flexShrink:0, marginBottom:14 }}>→</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD ───────────────────────────────────────────────────────────────
 function Dashboard({ requests, roster, meEmail, quotas, onNew, onSelect }) {
   const isMobile = useIsMobile();
@@ -313,6 +403,8 @@ function Dashboard({ requests, roster, meEmail, quotas, onNew, onSelect }) {
           </div>
         ))}
       </div>
+
+      <ProgressBoard requests={myPending} roster={roster} quotas={quotas} onSelect={onSelect} />
 
       <div style={{ marginBottom:20 }}>
         <div style={{ fontSize:13, fontWeight:700, marginBottom:8, color:C.text }}>My Recent Requests</div>
