@@ -86,13 +86,17 @@ function useIsMobile(bp=680) {
   return w < bp;
 }
 
+const GA_NONCE_KEY = "ga-oauth-nonce";
+
 function buildOAuthUrl() {
   const arr   = new Uint8Array(16);
   crypto.getRandomValues(arr);
   const nonce = Array.from(arr, b => b.toString(16).padStart(2,"0")).join("");
+  sessionStorage.setItem(GA_NONCE_KEY, nonce);
   return `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
     client_id: CLIENT_ID, redirect_uri: window.location.origin,
     response_type: "id_token", scope: "openid email profile", nonce,
+    hd: "seoulrobotics.org",
   })}`;
 }
 
@@ -120,6 +124,9 @@ function useAuth() {
         const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
         const padded = b64.padEnd(b64.length + (4 - b64.length % 4) % 4, "=");
         const p = JSON.parse(atob(padded));
+        const storedNonce = sessionStorage.getItem(GA_NONCE_KEY);
+        sessionStorage.removeItem(GA_NONCE_KEY);
+        if (storedNonce && p.nonce !== storedNonce) throw new Error("nonce mismatch");
         if (p?.email && p.email.endsWith("@seoulrobotics.org") && (!p.exp || p.exp * 1000 > Date.now())) {
           const u = { name: p.name, email: p.email, picture: p.picture, exp: p.exp };
           setUser(u);
