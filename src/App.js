@@ -132,7 +132,7 @@ function useAuth() {
           setUser(u);
           sessionStorage.setItem("ga_user", JSON.stringify(u));
         }
-      } catch {}
+      } catch (e) { console.warn("OAuth validation failed:", e.message); }
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
@@ -153,8 +153,14 @@ const get = action =>
   fetch(`${APPS_SCRIPT_URL}?action=${action}${API_TOKEN ? `&token=${API_TOKEN}` : ""}`, { redirect: "follow" })
     .then(r => r.json());
 
-// FIX 1: was "base64Data" — must be "base64" to match Code.gs body.base64
+const ALLOWED_MIME = ["image/jpeg","image/png","image/gif","image/webp","application/pdf",
+  "application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","text/plain"];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 async function uploadFileViaScript(file) {
+  if (file.size > MAX_FILE_SIZE) throw new Error(`파일 크기가 10MB를 초과합니다: ${file.name}`);
+  if (!ALLOWED_MIME.includes(file.type)) throw new Error(`지원하지 않는 파일 형식입니다: ${file.name}`);
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -496,7 +502,7 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
       for (let i = 0; i < files.length; i++) {
         setUploadMsg(`파일 업로드 중 (${i+1}/${files.length})...`);
         try { const r = await uploadFileViaScript(files[i]); uploaded.push(r); }
-        catch { uploaded.push({ url:"", name:files[i].name }); }
+        catch { setUploadMsg(""); throw new Error(`"${files[i].name}" 업로드 실패. 다시 시도해주세요.`); }
       }
       setUploadMsg("");
       const attachments = uploaded.map(u => ({ url:u.url, name:u.name })).filter(u => u.url);
@@ -674,9 +680,10 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
 
 // ─── REQUEST DETAIL ──────────────────────────────────────────────────────────
 function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
-  const [comment,     setComment]     = useState("");
-  const [busy,        setBusy]        = useState(false);
-  const [confirmAppr, setConfirmAppr] = useState(false);
+  const [comment,      setComment]      = useState("");
+  const [busy,         setBusy]         = useState(false);
+  const [confirmAppr,  setConfirmAppr]  = useState(false);
+  const [confirmCancel,setConfirmCancel]= useState(false);
 
   const typeInfo = REQ_TYPES[req.type] || {};
   const chain    = quotas?.approvalChains?.[req.type] || DEFAULT_CHAINS[req.type] || ["assignee"];
@@ -792,9 +799,20 @@ function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
         </div>
       )}
 
+      {canAct && !myTurn && !isSelf && (
+        <div style={{ marginTop:8, padding:"8px 12px", background:C.grayLight, borderRadius:8, fontSize:12, color:C.muted }}>
+          대기 중: <strong style={{ color:C.text }}>
+            {curRole === "assignee" ? `담당자 (${(quotas?.assignees?.[req.type]||[]).join(", ") || "미지정"})`
+            : curRole === "manager" ? `${applicant?.name || req.applicantEmail}의 매니저`
+            : curRole === "ceo"     ? "CEO"
+            : curRole}
+          </strong>
+        </div>
+      )}
+
       {myTurn && (
         <div style={{ borderTop:`1px solid ${C.border}`, paddingTop:12, marginTop:4 }}>
-          <Fld label="Comment (반려 시 필수)">
+          <Fld label={step === chain.length - 1 ? "Comment (필수)" : "Comment (반려 시 필수)"}>
             <Txa value={comment} onChange={setComment} placeholder="Add a comment..." rows={2} />
           </Fld>
           {confirmAppr ? (
@@ -802,15 +820,13 @@ function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
               <div style={{ fontSize:13, fontWeight:600, marginBottom:8 }}>승인하시겠습니까?</div>
               <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
                 <Btn variant="gray" onClick={() => setConfirmAppr(false)} disabled={busy}>취소</Btn>
-                <Btn onClick={() => act("approve")} disabled={busy}>
-                  {busy ? "..." : "확인"}
-                </Btn>
+                <Btn onClick={() => act("approve")} disabled={busy}>{busy ? "..." : "확인"}</Btn>
               </div>
             </div>
           ) : (
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
               <Btn variant="danger" onClick={() => act("reject")} disabled={busy || !comment.trim()}>Reject</Btn>
-              <Btn onClick={() => setConfirmAppr(true)} disabled={busy}>
+              <Btn onClick={() => setConfirmAppr(true)} disabled={busy || (step === chain.length - 1 && !comment.trim())}>
                 {step === chain.length - 1 ? "Complete" : "Approve →"}
               </Btn>
             </div>
@@ -820,7 +836,17 @@ function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
 
       {isSelf && (req.status === "pending" || req.status === "in_progress") && (
         <div style={{ marginTop:12, textAlign:"right" }}>
-          <Btn variant="outline" onClick={() => act("cancel")} disabled={busy}>Withdraw</Btn>
+          {confirmCancel ? (
+            <div style={{ background:"#fef2f2", borderRadius:8, padding:"10px 12px", textAlign:"left" }}>
+              <div style={{ fontSize:13, fontWeight:600, marginBottom:8, color:C.danger }}>신청을 취소하시겠습니까?</div>
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <Btn variant="gray" onClick={() => setConfirmCancel(false)} disabled={busy}>아니요</Btn>
+                <Btn variant="danger" onClick={() => act("cancel")} disabled={busy}>{busy ? "..." : "취소 확인"}</Btn>
+              </div>
+            </div>
+          ) : (
+            <Btn variant="outline" onClick={() => setConfirmCancel(true)} disabled={busy}>Withdraw</Btn>
+          )}
         </div>
       )}
     </Modal>
@@ -858,7 +884,7 @@ function MyRequests({ requests, meEmail, roster, onNew, onSelect }) {
         <Btn onClick={onNew}>+ New Request</Btn>
       </div>
       <div style={{ marginBottom:10 }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="제목 또는 유형 검색..."
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search / 검색 (제목, 유형, 메모)"
           style={{ ...inputStyle, marginBottom:8 }} />
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:6 }}>
           {["all","pending","in_progress","completed","rejected","cancelled"].map(s => (
@@ -1351,7 +1377,7 @@ export default function App() {
 
   const handleAction = async ({ action, id, comment, step, role }) => {
     pendingIds.current.add(id);
-    const prev = requests;
+    const prevSnapshot = requests.map(r => ({ ...r }));
     setRequests(prev => prev.map(r => {
       if (r.id !== id) return r;
       if (action === "approve") {
@@ -1368,7 +1394,7 @@ export default function App() {
       if (!res.ok) throw new Error(res.error || "Failed");
       notify(action==="approve"?"승인됐습니다!":action==="reject"?"반려됐습니다":"취소됐습니다", "success");
     } catch(e) {
-      setRequests(prev);
+      setRequests(prevSnapshot);
       notify("Action failed: " + e.message, "error");
     }
     finally {
