@@ -107,8 +107,8 @@ function parseJsonField(val) {
 function useAuth() {
   const [user, setUser] = useState(() => {
     try {
-      const u = JSON.parse(localStorage.getItem("ga_user") || "null");
-      if (u && (!u.exp || u.exp * 1000 < Date.now())) { localStorage.removeItem("ga_user"); return null; }
+      const u = JSON.parse(sessionStorage.getItem("ga_user") || "null");
+      if (u && (!u.exp || u.exp * 1000 < Date.now())) { sessionStorage.removeItem("ga_user"); return null; }
       return u;
     } catch { return null; }
   });
@@ -117,17 +117,19 @@ function useAuth() {
     const tok = hash.get("id_token");
     if (tok) {
       try {
-        const p = JSON.parse(atob(tok.split(".")[1]));
+        const b64 = tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = b64.padEnd(b64.length + (4 - b64.length % 4) % 4, "=");
+        const p = JSON.parse(atob(padded));
         if (p?.email && p.email.endsWith("@seoulrobotics.org") && (!p.exp || p.exp * 1000 > Date.now())) {
           const u = { name: p.name, email: p.email, picture: p.picture, exp: p.exp };
           setUser(u);
-          localStorage.setItem("ga_user", JSON.stringify(u));
+          sessionStorage.setItem("ga_user", JSON.stringify(u));
         }
       } catch {}
       window.history.replaceState(null, "", window.location.pathname);
     }
   }, []);
-  const logout = useCallback(() => { localStorage.removeItem("ga_user"); setUser(null); }, []);
+  const logout = useCallback(() => { sessionStorage.removeItem("ga_user"); setUser(null); }, []);
   return { user, logout };
 }
 
