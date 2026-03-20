@@ -457,8 +457,9 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
   const [files,      setFiles]      = useState([]);
   const [busy,       setBusy]       = useState(false);
   const [uploadMsg,  setUploadMsg]  = useState("");
-  const [onBehalf,   setOnBehalf]   = useState(false);
-  const [targets,  setTargets]  = useState([]);
+  const [onBehalf,    setOnBehalf]    = useState(false);
+  const [targets,     setTargets]     = useState([]);
+  const [showConfirm, setShowConfirm] = useState(false);
   const fileRef = useRef();
 
   const isAdmin = (quotas?.adminEmails || []).includes(meEmail) || meEmail === (quotas?.ceoEmail || "");
@@ -636,12 +637,28 @@ function NewRequestModal({ onClose, onSubmit, roster, quotas, user, meEmail }) {
         </div>
       )}
 
-      <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:14 }}>
-        <Btn variant="gray" onClick={onClose}>Cancel</Btn>
-        <Btn onClick={handleSubmit} disabled={!canSubmit || busy}>
-          {uploadMsg || (busy ? "Submitting..." : onBehalf && targets.length > 0 ? `Submit for ${targets.length} people` : "Submit Request")}
-        </Btn>
-      </div>
+      {showConfirm && (
+        <div style={{ marginTop:14, padding:"12px 14px", background:C.primaryLight, borderRadius:8, border:`1px solid ${C.primary}` }}>
+          <div style={{ fontWeight:700, fontSize:13, marginBottom:8 }}>다음 {targets.length}명으로 제출하시겠습니까?</div>
+          {targets.map(e => {
+            const r = roster.find(r => r.email === e);
+            return <div key={e} style={{ fontSize:12, color:C.text, marginBottom:3 }}>· {r?.name || e} ({e})</div>;
+          })}
+          <div style={{ display:"flex", gap:8, marginTop:10 }}>
+            <Btn variant="gray" onClick={() => setShowConfirm(false)}>취소</Btn>
+            <Btn onClick={handleSubmit} disabled={busy}>{busy ? "Submitting..." : "확인 제출"}</Btn>
+          </div>
+        </div>
+      )}
+
+      {!showConfirm && (
+        <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:14 }}>
+          <Btn variant="gray" onClick={onClose}>Cancel</Btn>
+          <Btn onClick={onBehalf && targets.length > 0 ? () => setShowConfirm(true) : handleSubmit} disabled={!canSubmit || busy}>
+            {uploadMsg || (busy ? "Submitting..." : onBehalf && targets.length > 0 ? `Submit for ${targets.length} people` : "Submit Request")}
+          </Btn>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -694,6 +711,7 @@ function RequestDetail({ req, onClose, onAction, meEmail, roster, quotas }) {
           <div style={{ fontWeight:700, fontSize:15 }}>{req.title}</div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>
             {applicant?.name || req.applicantEmail} · {req.submittedAt ? new Date(req.submittedAt).toLocaleDateString() : ""}
+            {req.submittedBy && (() => { const sb = roster.find(r => r.email === req.submittedBy); return <span style={{ color:C.warning, marginLeft:6 }}>({sb?.name || req.submittedBy} 대신 제출)</span>; })()}
           </div>
         </div>
         <Badge status={req.status} />
@@ -816,7 +834,8 @@ function MyRequests({ requests, meEmail, roster, onNew, onSelect }) {
     if (typeF   !== "all" && r.type   !== typeF)  return false;
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      if (!r.title?.toLowerCase().includes(q) && !REQ_TYPES[r.type]?.label.toLowerCase().includes(q)) return false;
+      const fields = [r.title, r.notes, r.destination, r.asset, REQ_TYPES[r.type]?.label];
+      if (!fields.some(f => f?.toLowerCase().includes(q))) return false;
     }
     return true;
   }), [mine, filter, typeF, search]);
@@ -1245,11 +1264,13 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
+    let active = true;
     setLoading(true);
     initialLoad.current = true;
-    loadData();
-    const t = setInterval(loadData, 30000);
-    return () => clearInterval(t);
+    const safeLoad = () => { if (active) loadData(); };
+    safeLoad();
+    const t = setInterval(safeLoad, 30000);
+    return () => { active = false; clearInterval(t); };
   }, [user, loadData]);
 
   useEffect(() => {
@@ -1294,6 +1315,7 @@ export default function App() {
         ...data,
         applicantEmail: email,
         applicantId:    ap?.id || "",
+        ...(email !== meEmail ? { submittedBy: meEmail } : {}),
         status:         "pending",
         currentStep:    0,
         submittedAt:    new Date().toISOString(),
