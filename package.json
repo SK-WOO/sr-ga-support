@@ -12,13 +12,18 @@
     "react-chartjs-2": "^5.2.0",
     "react-dom": "^19.2.4",
     "react-scripts": "5.0.1",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "xlsx": "^0.18.5"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "gas:push": "clasp push",
+    "gas:pull": "clasp pull",
+    "gas:deploy": "clasp deploy",
+    "gas:open": "clasp open"
   },
   "eslintConfig": {
     "extends": [
@@ -37,5 +42,12 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^6.0.2"
   }
 }

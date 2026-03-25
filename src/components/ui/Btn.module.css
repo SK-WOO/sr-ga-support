@@ -1,0 +1,15 @@
+.btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: opacity 0.1s;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.primary { background: var(--c-primary); color: #fff; }
+.danger  { background: var(--c-danger);  color: #fff; }
+.success { background: var(--c-success); color: #fff; }
+.outline { background: #fff; color: var(--c-primary); border: 1px solid var(--c-primary); }
+.gray    { background: var(--c-gray-light); color: var(--c-text); }

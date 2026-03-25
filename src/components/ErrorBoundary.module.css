@@ -1,0 +1,14 @@
+.wrap { padding: 40px 20px; text-align: center; color: var(--c-muted); }
+.icon { font-size: 32px; margin-bottom: 12px; }
+.title { font-size: 15px; font-weight: 600; color: var(--c-text); margin-bottom: 8px; }
+.desc  { font-size: 13px; margin-bottom: 16px; }
+.btn {
+  padding: 8px 20px;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--c-primary);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}

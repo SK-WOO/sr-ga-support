@@ -1,3 +1,32 @@
+/* SR Brand CSS Variables */
+:root {
+  --c-primary:       #1d4ed8;
+  --c-primary-light: #dbeafe;
+  --c-danger:        #dc2626;
+  --c-danger-light:  #fee2e2;
+  --c-success:       #16a34a;
+  --c-success-light: #dcfce7;
+  --c-warning:       #d97706;
+  --c-warning-light: #fef3c7;
+  --c-purple:        #7c3aed;
+  --c-purple-light:  #ede9fe;
+  --c-gray:          #6b7280;
+  --c-gray-light:    #f3f4f6;
+  --c-border:        #e5e7eb;
+  --c-text:          #111827;
+  --c-muted:         #6b7280;
+  --c-bg:            #f9fafb;
+  --c-white:         #ffffff;
+  --radius-sm:       4px;
+  --radius-md:       6px;
+  --radius-lg:       8px;
+  --radius-xl:       10px;
+  --radius-2xl:      12px;
+}
+
 * { box-sizing: border-box; }
 body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Common input reset */
+input, select, textarea, button { font-family: inherit; }

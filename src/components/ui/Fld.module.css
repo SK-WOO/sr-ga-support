@@ -1,0 +1,21 @@
+.field { margin-bottom: 14px; }
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-muted);
+  display: block;
+  margin-bottom: 4px;
+}
+.required { color: var(--c-danger); }
+.error { font-size: 11px; color: var(--c-danger); margin-top: 3px; }
+.input {
+  width: 100%;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  font-size: 13px;
+  box-sizing: border-box;
+  background: #fff;
+  outline: none;
+}
+.input:focus { border-color: var(--c-primary); }

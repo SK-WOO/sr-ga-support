@@ -1,6 +1,6 @@
 # SR GA Support — User Manual
 
-**Version:** v0.1.0 · **Last Updated:** 2026-03-18
+**Version:** v0.3.2 · **Last Updated:** 2026-03-18
 
 ---
 
@@ -39,6 +39,8 @@ Submit and track requests for business cards, onboarding/offboarding, business t
 - **Title**: Brief description of your request (required)
 - **Details**: Additional notes
 - **Attachments**: Receipts, photos, etc. (required for expense claims)
+  - Supported formats: JPG, PNG, GIF, WebP, PDF, Word, Excel, TXT
+  - Maximum file size: 10MB per file
 
 ### 4. Click **Submit Request** → Slack notification sent to assignee/approver
 
@@ -80,7 +82,7 @@ Submit and track requests for business cards, onboarding/offboarding, business t
 ## Withdrawing a Request
 
 - In My Requests, click a request with **Pending** status
-- Click the **Withdraw** button at the bottom
+- Click **Withdraw** → confirm in the popup dialog → status changes to Cancelled
 
 ---
 
@@ -136,6 +138,24 @@ Toggle approval steps — Manager / CEO / Assignee on/off per request type
 
 - On new request → channel notification with **View & Approve** button link
 - On approval/rejection → channel notification
+
+---
+
+## Security
+
+- **Authentication**: OAuth with nonce-based CSRF protection
+- **Session tokens**: Stored in sessionStorage, automatically cleared when tab closes
+- **Domain restriction**: Only @seoulrobotics.org accounts can access the application
+
+---
+
+## Design & Branding
+
+- **Font**: Pretendard
+- **SR Brand Colors**:
+  - Red: #EC570C
+  - Yellow: #FFD65A
+  - Black: #0D0D0E
 
 ---
 
