@@ -2,6 +2,9 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { C, VERSION, BUILD_DATE, SR_GATE_URL, MANUAL_URL_KO, MANUAL_URL_EN, DEFAULT_CHAINS } from "./constants";
 import useAuth, { buildOAuthUrl } from "./hooks/useAuth";
+import { SRAuthGate } from "@sr/auth-gate";
+
+const ACCESS_SHEET_ID = "11yfJSCpTuX6aoxLDoAlqgCP74JhMm5ukjqPdfgLY3xo";
 import useIsMobile from "./hooks/useIsMobile";
 import { post, get, APPS_SCRIPT_URL } from "./api/client";
 import { useI18n } from "./i18n/useI18n";
@@ -214,6 +217,7 @@ export default function App() {
   );
 
   return (
+    <SRAuthGate appSlug="ga-support" sheetId={ACCESS_SHEET_ID} userEmail={user?.email || ""}>
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
       {/* Header */}
       <div style={{ background: C.primary, color: "#fff", padding: "0 20px",
@@ -312,5 +316,6 @@ export default function App() {
       )}
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>
+    </SRAuthGate>
   );
 }
