@@ -4,7 +4,7 @@ import { C, VERSION, BUILD_DATE, SR_GATE_URL, MANUAL_URL_KO, MANUAL_URL_EN, DEFA
 import useAuth, { buildOAuthUrl } from "./hooks/useAuth";
 import { SRAuthGate } from "@sr/auth-gate";
 import useIsMobile from "./hooks/useIsMobile";
-import { post, get, APPS_SCRIPT_URL } from "./api/client";
+import { post, get } from "./api/client";
 import { useI18n } from "./i18n/useI18n";
 import type { Quotas, Request, RosterMember, Notification } from "./types";
 import Dashboard from "./components/Dashboard";
@@ -40,10 +40,6 @@ export default function App() {
   const notify = useCallback((msg: string, type = "info") => setToast({ msg, type }), []);
 
   const loadData = useCallback(async () => {
-    if (!APPS_SCRIPT_URL) {
-      if (initialLoad.current) { setLoading(false); initialLoad.current = false; }
-      return;
-    }
     try {
       const meEmail = user?.email || "";
       const [rd, qd, rod, nd] = await Promise.all([
