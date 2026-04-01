@@ -46,13 +46,14 @@ module.exports = async function handler(req, res) {
     let response;
     if (req.method === "GET") {
       const params = new URLSearchParams(req.query);
-      response = await fetch(`${SCRIPT_URL}?${params}`, { signal: controller.signal });
+      response = await fetch(`${SCRIPT_URL}?${params}`, { redirect: "follow", signal: controller.signal });
     } else {
       const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
       response = await fetch(SCRIPT_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain" },
         body: JSON.stringify(body),
+        redirect: "follow",
         signal: controller.signal,
       });
     }
