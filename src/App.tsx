@@ -3,13 +3,10 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { C, VERSION, BUILD_DATE, SR_GATE_URL, MANUAL_URL_KO, MANUAL_URL_EN, DEFAULT_CHAINS } from "./constants";
 import useAuth, { buildOAuthUrl } from "./hooks/useAuth";
 import { SRAuthGate } from "@sr/auth-gate";
-
-const ACCESS_SHEET_ID = "11yfJSCpTuX6aoxLDoAlqgCP74JhMm5ukjqPdfgLY3xo";
 import useIsMobile from "./hooks/useIsMobile";
 import { post, get, APPS_SCRIPT_URL } from "./api/client";
 import { useI18n } from "./i18n/useI18n";
 import type { Quotas, Request, RosterMember, Notification } from "./types";
-
 import Dashboard from "./components/Dashboard";
 import MyRequests from "./components/MyRequests";
 import Approvals from "./components/Approvals";
@@ -20,6 +17,8 @@ import NewRequestModal from "./components/NewRequestModal";
 import MobileMenu from "./components/MobileMenu";
 import NotificationBell from "./components/NotificationBell";
 import Toast from "./components/ui/Toast";
+
+const ACCESS_SHEET_ID = "11yfJSCpTuX6aoxLDoAlqgCP74JhMm5ukjqPdfgLY3xo";
 
 export default function App() {
   const { user, logout } = useAuth();
