@@ -1,7 +1,6 @@
 import { ALLOWED_MIME, MAX_FILE_SIZE } from "../constants";
 
-export const APPS_SCRIPT_URL = process.env.REACT_APP_SCRIPT_URL || "";
-const API_TOKEN              = process.env.REACT_APP_API_TOKEN  || "";
+const API_BASE = "/api/gas-proxy";
 
 // Phase 6-1: id_token 추출 (sessionStorage에서)
 function getIdToken() {
@@ -49,16 +48,15 @@ async function fetchWithRetry(url: string, options: RequestInit, { retries = 2, 
 
 export async function post(body, opts = {}) {
   const idToken = getIdToken();
-  // Phase 6-1: id_token 우선, fallback으로 API_TOKEN
-  const authBody = idToken
-    ? { ...body, id_token: idToken }
-    : API_TOKEN ? { ...body, token: API_TOKEN } : body;
   return fetchWithRetry(
-    APPS_SCRIPT_URL,
+    API_BASE,
     {
-      method: "POST", redirect: "follow",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(authBody),
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(idToken ? { "Authorization": `Bearer ${idToken}` } : {}),
+      },
+      body: JSON.stringify(body),
     },
     opts
   );
@@ -66,10 +64,16 @@ export async function post(body, opts = {}) {
 
 export async function get(action, opts = {}) {
   const idToken = getIdToken();
-  let url = `${APPS_SCRIPT_URL}?action=${action}`;
-  if (idToken) url += `&id_token=${encodeURIComponent(idToken)}`;
-  else if (API_TOKEN) url += `&token=${API_TOKEN}`;
-  return fetchWithRetry(url, { redirect: "follow" }, opts);
+  const url = `${API_BASE}?action=${action}`;
+  return fetchWithRetry(
+    url,
+    {
+      headers: {
+        ...(idToken ? { "Authorization": `Bearer ${idToken}` } : {}),
+      },
+    },
+    opts
+  );
 }
 
 export async function uploadFileViaScript(file) {
