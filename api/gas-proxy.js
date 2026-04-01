@@ -1,5 +1,5 @@
 // api/gas-proxy.js
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const SCRIPT_URL = process.env.SCRIPT_URL;
 
   if (!SCRIPT_URL) {
@@ -13,7 +13,6 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok: false, error: "Authorization required" });
   }
 
-  let userEmail = "";
   try {
     const tokenRes = await fetch(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
