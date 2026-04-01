@@ -13,6 +13,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ ok: false, error: "Authorization required" });
   }
 
+  let userEmail = "";
   try {
     const tokenRes = await fetch(
       `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`
