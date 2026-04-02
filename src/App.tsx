@@ -18,7 +18,7 @@ import MobileMenu from "./components/MobileMenu";
 import NotificationBell from "./components/NotificationBell";
 import Toast from "./components/ui/Toast";
 
-const ACCESS_SHEET_ID = "11yfJSCpTuX6aoxLDoAlqgCP74JhMm5ukjqPdfgLY3xo";
+
 
 export default function App() {
   const { user, logout } = useAuth();
@@ -212,7 +212,7 @@ export default function App() {
   );
 
   return (
-    <SRAuthGate appSlug="ga-support" sheetId={ACCESS_SHEET_ID} userEmail={user?.email || ""}>
+    <SRAuthGate appSlug="ga-support" proxyUrl="https://sr-gate.vercel.app/api/check-access" userEmail={user?.email || ""}>
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
       {/* Header */}
       <div style={{ background: C.primary, color: "#fff", padding: "0 20px",
