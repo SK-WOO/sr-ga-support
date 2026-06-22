@@ -212,7 +212,7 @@ export default function App() {
   );
 
   return (
-    <SRAuthGate appSlug="ga-support" proxyUrl="https://sr-gate.vercel.app/api/check-access" userEmail={user?.email || ""}>
+    <SRAuthGate appSlug="ga-support" proxyUrl="https://sr-gate.vercel.app/api/check-access" userEmail={user?.email || ""} idToken={user?.id_token}>
     <div style={{ minHeight: "100vh", background: C.bg, fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
       {/* Header */}
       <div style={{ background: C.primary, color: "#fff", padding: "0 20px",
