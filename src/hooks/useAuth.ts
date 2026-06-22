@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 const CLIENT_ID   = process.env.REACT_APP_CLIENT_ID || "";
 export const GA_NONCE_KEY = "ga-oauth-nonce";
@@ -49,6 +49,15 @@ export default function useAuth() {
       return u;
     } catch { return null; }
   });
+
+  // 만료 5분 전 자동 재로그인
+  useEffect(() => {
+    if (!user?.exp) return;
+    const ms = user.exp * 1000 - Date.now() - 5 * 60 * 1000;
+    if (ms <= 0) { sessionStorage.removeItem("ga_user"); window.location.href = buildOAuthUrl(); return; }
+    const timer = setTimeout(() => { sessionStorage.removeItem("ga_user"); window.location.href = buildOAuthUrl(); }, ms);
+    return () => clearTimeout(timer);
+  }, [user?.exp]);
 
   const logout = useCallback(() => { sessionStorage.removeItem("ga_user"); setUser(null); }, []);
   return { user, logout };
